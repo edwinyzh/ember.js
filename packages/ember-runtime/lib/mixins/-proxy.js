@@ -3,7 +3,7 @@
 @submodule ember-runtime
 */
 
-import { CachedTag, DirtyableTag, UpdatableTag } from 'glimmer-reference';
+import { CONSTANT_TAG, CachedTag, DirtyableTag, UpdatableTag } from 'glimmer-reference';
 import { symbol } from 'ember-utils';
 import {
   assert,
@@ -23,7 +23,6 @@ import {
   tagFor
 } from 'ember-metal';
 import { bool } from '../computed/computed_macros';
-import { POST_INIT } from '../system/core_object';
 
 const IS_PROXY = symbol('IS_PROXY');
 
@@ -44,13 +43,19 @@ function contentPropertyDidChange(content, contentKey) {
 }
 
 class ProxyTag extends CachedTag {
-  constructor(proxy, content) {
+  constructor(proxy) {
     super();
+    this.proxy = proxy;
     this.proxyWrapperTag = new DirtyableTag();
-    this.proxyContentTag = new UpdatableTag(tagFor(content));
+    this.proxyContentTag = new UpdatableTag(CONSTANT_TAG);
+    this.hasContent = false;
   }
 
   compute() {
+    if (!this.hasContent) {
+      this.contentDidChange();
+    }
+
     return Math.max(this.proxyWrapperTag.value(), this.proxyContentTag.value());
   }
 
@@ -58,8 +63,10 @@ class ProxyTag extends CachedTag {
     this.proxyWrapperTag.dirty();
   }
 
-  contentDidChange(content) {
+  contentDidChange() {
+    let content = get(this.proxy, 'content');
     this.proxyContentTag.update(tagFor(content));
+    this.hasContent = true;
   }
 }
 
@@ -71,8 +78,13 @@ class ProxyTag extends CachedTag {
   @namespace Ember
   @private
 */
-const PROXY_MIXIN_PROPS = {
+export default Mixin.create({
   [IS_PROXY]: true,
+
+  init() {
+    this._super(...arguments);
+    meta(this)._tag = new ProxyTag(this);
+  },
 
   /**
     The object whose properties will be forwarded.
@@ -86,7 +98,7 @@ const PROXY_MIXIN_PROPS = {
 
   _contentDidChange: observer('content', function() {
     assert('Can\'t set Proxy\'s content to itself', get(this, 'content') !== this);
-    meta(this)._tag.contentDidChange(get(this, 'content'));
+    tagFor(this).contentDidChange();
   }),
 
   isTruthy: bool('content'),
@@ -136,11 +148,4 @@ const PROXY_MIXIN_PROPS = {
     );
     return set(content, key, value);
   }
-};
-
-PROXY_MIXIN_PROPS[POST_INIT] = function postInit() {
-  this._super();
-  meta(this)._tag = new ProxyTag(this, get(this, 'content'));
-};
-
-export default Mixin.create(PROXY_MIXIN_PROPS);
+});

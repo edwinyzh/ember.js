@@ -9,6 +9,16 @@ import ObjectProxy from '../../system/object_proxy';
 
 QUnit.module('ObjectProxy');
 
+QUnit.test('throws if `this._super` is not called from `init`', function() {
+  let Proxy = ObjectProxy.extend({
+    init() {}
+  });
+
+  expectAssertion(() => {
+    Proxy.create();
+  }, /You must call `this._super\(...arguments\);` when overriding `init` on a framework object. Please update .* to call `this._super\(...arguments\);` from `init`./);
+});
+
 testBoth('should not proxy properties passed to create', function (get, set) {
   let Proxy = ObjectProxy.extend({
     cp: computed({
